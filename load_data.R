@@ -9,125 +9,63 @@ pacman::p_load(
   scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
   extrafont,here)
 
+
+##Clean environment if need be
+rm(list = ls())
 ###Load Cameroon data
 
-## Unweighted
-HHroster <- read_rds(here("Cameroon","data", "HHroster.rds"))
-main <- read_rds(here("Cameroon","data", "main.rds"))
-RA_adult <- read_rds(here("Cameroon","data", "RA_adult.rds"))
-RA_woman <- read_rds(here("Cameroon","data", "RA_woman.rds"))
-RA_caregiver <- read_rds(here("Cameroon","data", "RA_caregiver.rds"))
+CMR_HHroster <- read_rds(here("Cameroon","data","HHroster.rds"))
+CMR_main <- read_rds(here("Cameroon","data","main.rds"))
+CMR_RA_adult <- read_rds(here("Cameroon","data","RA_adult.rds"))
+CMR_RA_woman <- read_rds(here("Cameroon","data","RA_woman.rds"))
+CMR_RA_caregiver <- read_rds(here("Cameroon","data","RA_caregiver.rds"))
 
+# Survey objects
+FDS_CMR_2024_main <- CMR_main %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr, nest = TRUE)
 
-## Create survey objects to do analysis by population groups on a national level----
-FDS_CMR_2024_main <- main %>%
-  as_survey_design(
-    strata=samp_strat,
-    weights = wgh_samp_pop_restr, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
-  )
+FDS_CMR_2024_HHroster <- CMR_HHroster %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr, nest = TRUE)
 
-FDS_CMR_2024_HHroster <- HHroster %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
+FDS_CMR_2024_RA_adult <- CMR_RA_adult %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_resp, nest = TRUE)
 
-FDS_CMR_2024_RA_adult <- RA_adult %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_resp, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
+FDS_CMR_2024_RA_caregiver <- CMR_RA_caregiver %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_u5, nest = TRUE)
 
-FDS_CMR_2024_RA_caregiver <- RA_caregiver %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_u5, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
-
-
-FDS_CMR_2024_RA_woman <- RA_woman %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_w, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
-
+FDS_CMR_2024_RA_woman <- CMR_RA_woman %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_w, nest = TRUE)
 
 
 ##Load Zambia data
 
-
-## Unweighted
-HHroster <- read_rds(here("Zambia","data", "HHroster.rds"))
-main <- read_rds(here("Zambia","data", "main.rds"))
-RA_adult <- read_rds(here("Zambia","data", "RA_adult.rds"))
-RA_woman <- read_rds(here("Zambia","data", "RA_woman.rds"))
-RA_caregiver <- read_rds(here("Zambia","data", "RA_caregiver.rds"))
-
-## Survey objects
-#FDS_ZAM_2025_HHroster <- read_rds(here("data", "Survey objects", "FDS_ZAM_2025_HHroster.rds"))
-FDS_ZAM_2025_main <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_main.rds"))
-FDS_ZAM_2025_RA_adult <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_adult.rds"))
-FDS_ZAM_2025_RA_woman <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_woman.rds"))
-FDS_ZAM_2025_RA_caregiver <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_caregiver.rds"))
-FDS_ZAM_2025_HHroster <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_HHroster_strat.rds"))
-
-FDS_ZAM_2025_HHroster_strat <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_HHroster_strat.rds"))
-FDS_ZAM_2025_main_strat <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_main_strat.rds"))
-FDS_ZAM_2025_RA_adult_strat <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_adult_strat.rds"))
-FDS_ZAM_2025_RA_woman_strat <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_woman_strat.rds"))
-FDS_ZAM_2025_RA_caregiver_strat <- read_rds(here("Zambia","data", "Survey objects", "FDS_ZAM_2025_RA_caregiver_strat.rds"))
+FDS_ZAM_2025_main <- read_rds(here("Zambia","data","Survey objects","FDS_ZAM_2025_main.rds"))
+FDS_ZAM_2025_RA_adult <- read_rds(here("Zambia","data","Survey objects","FDS_ZAM_2025_RA_adult.rds"))
+FDS_ZAM_2025_RA_woman <- read_rds(here("Zambia","data","Survey objects","FDS_ZAM_2025_RA_woman.rds"))
+FDS_ZAM_2025_RA_caregiver <- read_rds(here("Zambia","data","Survey objects","FDS_ZAM_2025_RA_caregiver.rds"))
+FDS_ZAM_2025_HHroster <- read_rds(here("Zambia","data","Survey objects","FDS_ZAM_2025_HHroster_strat.rds"))
 
 ##Load Pakistan data
 
+# Load data
+PAK_HHroster <- read_rds(here("Pakistan","data","HHroster.rds"))
+PAK_main <- read_rds(here("Pakistan","data","main.rds"))
+PAK_RA_adult <- read_rds(here("Pakistan","data","RA_adult.rds"))
+PAK_RA_woman <- read_rds(here("Pakistan","data","RA_woman.rds"))
+PAK_RA_caregiver <- read_rds(here("Pakistan","data","RA_caregiver.rds"))
 
-#Import 5 datasets. Here we are using FDS Pakistan dataset
+# Survey objects
+FDS_PAK_2024_main <- PAK_main %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr, nest = TRUE)
 
-## Unweighted
-HHroster <- read_rds(here("Pakistan", "data", "HHroster.rds"))
-main <- read_rds(here("Pakistan","data", "main.rds"))
-RA_adult <- read_rds(here("Pakistan","data", "RA_adult.rds"))
-RA_woman <- read_rds(here("Pakistan","data", "RA_woman.rds"))
-RA_caregiver <- read_rds(here("Pakistan","data", "RA_caregiver.rds"))
+FDS_PAK_2024_HHroster <- PAK_HHroster %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr, nest = TRUE)
 
-## Create survey objects to do analysis by population groups on a national level----
+FDS_PAK_2024_RA_adult <- PAK_RA_adult %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_resp, nest = TRUE)
 
-FDS_PAK_2024_main <- main %>%
-  as_survey_design(
-    strata=samp_strat,
-    weights = wgh_samp_pop_restr, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
-  )
+FDS_PAK_2024_RA_caregiver <- PAK_RA_caregiver %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_u5, nest = TRUE)
 
-FDS_PAK_2024_HHroster <- HHroster %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
-
-FDS_PAK_2024_RA_adult <- RA_adult %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_resp, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
-
-FDS_PAK_2024_RA_caregiver <- RA_caregiver %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_u5, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
-
-
-FDS_PAK_2024_RA_woman <- RA_woman %>%
-  as_survey_design(
-    strata = samp_strat,           # Specify the column with cluster IDs
-    weights = wgh_samp_pop_restr_w, # Specify the column with survey weights
-    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
-  )
+FDS_PAK_2024_RA_woman <- PAK_RA_woman %>%
+  as_survey_design(strata = samp_strat, weights = wgh_samp_pop_restr_w, nest = TRUE)
