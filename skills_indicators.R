@@ -200,6 +200,8 @@ table(FDS_PAK_2024_RA_adult$variables$Skills41d) #learning/studying online
 table(FDS_PAK_2024_RA_adult$variables$Skills42a) #driving license to drive a car
 table(FDS_PAK_2024_RA_adult$variables$Skills42b) #driving license to drive a truck
 
+#add job search sction
+table(FDS_ZAM_2025_RA_adult$variables$PL01_10) #driving license to drive a truck
 
 
 ##To your knowledge, do you have the right to work legally in Pakistan?
@@ -209,3 +211,22 @@ table(FDS_PAK_2024_RA_adult$variables$JobLegal1) #to your knowledge d you have a
 
 
 ##Regression by skills as above ? by Gender ? Regression also based on legal framework
+###Add below indicators to the regression
+
+#Women with children under 2
+#Women with children under 5
+#Education level
+#Literacy
+#Trainings -> check indicator EducR16
+#Ownership of a bank account or any financial account
+#Depression rates
+#Decision-making section - check if we can add
+#If any of the languages in the host country is spoken 
+#Job search barriers + lack of reading, computer literacy + legal literacy +
+#Discrimination
+#Documentation linked to gender
+#Ownership of a mobile phone 
+#Safety feeling + if you cannot move in the evening.
+#Domestic work
+#Safety at work ( from protection section)
+#Documentation -that is any valid ID document? Also, work permits 
