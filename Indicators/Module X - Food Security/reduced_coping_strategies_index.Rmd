@@ -1,0 +1,109 @@
+---
+title: "FDS - Food Security Indicators"
+sub-title: "Reduced Consumption Score"
+author: "Global Survey Team"
+date: "2026-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r loadpackages, include=FALSE}
+
+
+#Load Packages 
+if(!require(pacman)) install.packages('pacman')
+
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
+  extrafont,here)
+```
+
+
+
+The Reduced Coping Strategies Index (rCSI) is a consumption-based coping indicator. The index measures the frequency and severity of behavioural strategies that people apply when they cannot access enough food or when they foresee a decrease in food in the last seven days. The rCSI includes five standard strategies and allows for comparison across space, time, and population groups.
+
+
+More details on the indicator can be found here: https://vamresources.manuals.wfp.org/docs/reduced-coping-strategies-index
+
+ 
+# Indicator Calculation 
+
+
+## rCSI
+
+```{r}
+# Label rCSI relevant variables -----------------------------------------------#
+
+##check names
+
+#Food02c - rCSILessQlty
+#Food05c - rCSIBorrow
+#Food08c- rCSIMealNb
+# Food07c- rCSIMealAdult
+# Food06c - rCSIMealSize
+
+
+main$rCSILessQlty <- main$Food02c
+main$rCSIBorrow <- main$Food05c
+main$rCSIMealNb <- main$Food08c
+main$rCSIMealAdult <- main$Food07c
+main$rCSIMealSize <- main$Food06c
+
+table(main$rCSILessQlty)
+table(main$rCSIBorrow)
+table(main$rCSIMealNb)
+table(main$rCSIMealAdult)
+table(main$rCSIMealSize)
+
+```
+
+```{r}
+
+var_label(main$rCSILessQlty)  <- "Relied on less preferred and less expensive food"
+var_label(main$rCSIBorrow)    <- "Borrowed food or relied on help from a relative or friend"
+var_label(main$rCSIMealNb)    <- "Reduce number of meals eaten in a day"
+var_label(main$rCSIMealSize)  <- "Limit portion size of meals at meal times"
+var_label(main$rCSIMealAdult) <- "Restricted consumption by adults for small children to eat"
+
+# Calculate rCSI --------------------------------------------------------------# 
+
+main <- main %>%
+  mutate(rCSI = rCSILessQlty + 
+                              (rCSIBorrow * 2) + 
+                               rCSIMealNb + 
+                               rCSIMealSize + 
+                              (rCSIMealAdult * 3))
+
+var_label(main$rCSI)          <- "Reduced coping strategies index (rCSI)"
+
+# Creating weighted and unweighted summary of rCSI ----------------------------# 
+
+#unweighted
+rCSI_table_mean <- main %>% 
+  group_by(Intro_07) %>%
+  drop_na(rCSI) %>% 
+  summarise(meanrCSI = mean(rCSI))
+  
+
+```
+
+```{r}
+
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+
+table(main$rCSI)
+
+```

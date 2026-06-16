@@ -1,0 +1,261 @@
+---
+title: "FDS - Food Security Indicators"
+sub-title: "Household Food Insecurity Scale Indicator (HFIAS)"
+author: "Global Survey Team"
+date: "2026-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r loadpackages, include=FALSE}
+
+
+#Load Packages 
+if(!require(pacman)) install.packages('pacman')
+
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
+  extrafont,here)
+```
+
+
+
+Indicator definition can be found here: https://www.fao.org/fileadmin/user_upload/eufao-fsi4dm/doc-training/hfias.pdf
+
+# Indicator Calculation 
+
+## HFIAS
+
+```{r food-rescale}
+# Set number of days to 0 if households have not experienced a form of food insecurity
+food_add0 <- function(food_var, random_number_food = main$food_number_of_days) {
+  last_char <- substr(cur_column(), nchar(cur_column()), nchar(cur_column()))
+  food_a <- main[[paste0(sub(last_char, "a", cur_column()))]]
+  
+  if (last_char == "b") {
+    case_when(
+      random_number_food == 7 & food_a == 2 ~ 0,
+      TRUE ~ food_var)
+  } else if (last_char == "c") {
+    case_when(
+      random_number_food == 30 & food_a == 2 ~ 0,
+      TRUE ~ food_var)
+  }
+}
+
+# Set number of days to 0 if households have not experienced a form of food insecurity
+main <- main %>%
+  mutate(across(starts_with("Food") & (ends_with("b") | ends_with("c")) & names(.)[nchar(names(.)) == 7], ~ food_add0(as.numeric(.x))))
+
+# Rescale values from 7 to 30 day recall period
+food_rescale_7_30 <- function(food_c, variant = 1) {
+  
+  if (variant == 1) {
+  case_when(
+    food_c == 0 ~ 0,
+    food_c %in% c(1) ~ 1,
+    food_c %in% c(2,3) ~ 2,
+    food_c %in% c(4,5,6,7) ~ 3)
+  } else if (variant == 2) {
+  case_when(
+    food_c == 0 ~ 0,
+    food_c %in% c(1,2) ~ 1,
+    food_c %in% c(3,4) ~ 2,
+    food_c %in% c(5,6,7) ~ 3)
+  } else if (variant == 3) {
+  case_when(
+    food_c == 0 ~ 0,
+    food_c %in% c(1,2) ~ 1,
+    food_c %in% c(3,4,5) ~ 2,
+    food_c %in% c(6,7) ~ 3)
+  }
+}
+
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("c") & names(.)[nchar(names(.)) == 7], ~ food_rescale_7_30(.x, variant = 2), .names = "{str_replace(.col, 'c', 'b')}Rescaled"))
+
+# For test purposes - consider removing
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("c") & names(.)[nchar(names(.)) == 7], ~ food_rescale_7_30(.x, variant = 1), .names = "{str_replace(.col, 'c', 'b')}RescaledV1"))
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("c") & names(.)[nchar(names(.)) == 7], ~ food_rescale_7_30(.x, variant = 3), .names = "{str_replace(.col, 'c', 'b')}RescaledV3"))
+
+# Combine original and rescaled values in 30 day recall period
+food_combine_30 <- function(food_b) {
+  food_bRescaled <- main[[paste0(cur_column(), "Rescaled")]]
+  
+  case_when(
+    is.na(food_b) & !is.na(food_bRescaled) ~ food_bRescaled,
+    !is.na(food_b) & is.na(food_bRescaled) ~ food_b)
+}
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("b") & names(.)[nchar(names(.)) == 7], ~ food_combine_30(.x), .names = "{.col}Combined"))
+
+# Rescale values from 30 to 7 day recall period
+food_rescale_30_7 <- function(food_b) {
+  food_b * 7/3
+}
+
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("b") & names(.)[nchar(names(.)) == 7], ~ food_rescale_30_7(.x), .names = "{str_replace(.col, 'b', 'c')}Rescaled"))
+
+# Combine original and rescaled values in 7 day recall period
+food_combine_7 <- function(food_c) {
+  food_cRescaled <- main[[paste0(cur_column(), "Rescaled")]]
+  
+  case_when(
+    is.na(food_c) & !is.na(food_cRescaled) ~ food_cRescaled,
+    !is.na(food_c) & is.na(food_cRescaled) ~ food_c)
+}
+
+main <- main %>%
+  mutate(across(starts_with("Food") & ends_with("c") & names(.)[nchar(names(.)) == 7], ~ food_combine_7(.x), .names = "{.col}Combined"))
+```
+
+```{r HFIAS}
+label_fds <- function(df = ., col_name, label_string, prefixFalse = "No", add_labels = TRUE, false_label = NULL) {
+  labels <- c(label_string, paste0(prefixFalse, " ", tolower(substr(label_string, 1, 1)), substr(label_string, 2, nchar(label_string))))
+  
+  if (!is.null(false_label)) {
+    labels[2] <- false_label
+  }
+
+  if (add_labels == TRUE) {
+    df <- df %>%
+      mutate({{col_name}} := labelled({{col_name}},
+                                      label = label_string,
+                                      setNames(1:2, labels)))
+  } else if (add_labels == FALSE) {
+    df <- df %>%
+      mutate({{col_name}} := labelled({{col_name}},
+                                      label = label_string))
+  }
+
+  return(df)
+}
+
+# Sum values for HFIAS
+HFIASOrig_vars <- c("Food01b", "Food02b", "Food03b", "Food04b", "Food06b", "Food08b", "Food09b", "Food10b", "Food11b")
+HFIASRescaled_vars <- paste0(HFIASOrig_vars, "Rescaled")
+HFIASRescaledV3_vars <- paste0(HFIASOrig_vars, "RescaledV3")
+HFIASRescaledV1_vars <- paste0(HFIASOrig_vars, "RescaledV1")
+HFIASCombined_vars <- paste0(HFIASOrig_vars, "Combined")
+
+main <- main |>
+  mutate(
+    HFIASOrig = Reduce(`+`, across(all_of(HFIASOrig_vars))),
+    HFIASRescaled = Reduce(`+`, across(all_of(HFIASRescaled_vars))),
+    HFIASRescaledV3 = Reduce(`+`, across(all_of(HFIASRescaledV3_vars))),
+    HFIASCombined = Reduce(`+`, across(all_of(HFIASCombined_vars)))
+   ) |>
+label_fds(HFIASOrig, "Household Food Insecurity Access Scale Score (non-rescaled values only)", add_labels = FALSE) |>
+  label_fds(HFIASRescaled, "Household Food Insecurity Access Scale Score (rescaled values only)", add_labels = FALSE) |>
+  label_fds(HFIASCombined, "Household Food Insecurity Access Scale Score (combined values)", add_labels = FALSE)
+
+
+# Create HFIA categories based on conditions
+HFIA_cat <- function(df, varName) {
+  if (varName == "Orig") {
+    vars <- HFIASOrig_vars
+  } else if (varName == "Rescaled") {
+    vars <- HFIASRescaled_vars
+  } else if (varName == "Combined") {
+    vars <- HFIASCombined_vars
+  }
+  
+  varCat1 <- paste0("HFIA", varName, "Cat1")
+  varCat2 <- paste0("HFIA", varName, "Cat2")
+  varCat3 <- paste0("HFIA", varName, "Cat3")
+  varCat4 <- paste0("HFIA", varName, "Cat4")
+  
+  df <- df %>%
+    mutate(
+      !!varCat1 := case_when(
+        get(vars[1]) %in% c(0, 1) & get(vars[2]) == 0 & get(vars[3]) == 0 & 
+          get(vars[4]) == 0 & get(vars[5]) == 0 & get(vars[6]) == 0 & 
+          get(vars[7]) == 0 & get(vars[8]) == 0 & get(vars[9]) == 0 ~ 1,
+        TRUE ~ NA_real_)) |>
+    mutate(
+      !!varCat2 := case_when(
+        (get(vars[1]) %in% c(2, 3) | get(vars[2])  %in% c(1, 2, 3) | get(vars[3])  == 1 | get(vars[4])  == 1) & 
+          get(vars[5]) == 0 & get(vars[6]) == 0 & get(vars[7]) == 0 & get(vars[8]) == 0 & get(vars[9]) == 0 ~ 1,
+        TRUE ~ NA_real_)) |>
+    mutate(
+      !!varCat3 := case_when(
+        (get(vars[3]) %in% c(2, 3) | get(vars[4]) %in% c(2, 3) | get(vars[5]) %in% c(1, 2) | get(vars[6]) %in% c(1, 2)) &
+          get(vars[7]) == 0 & get(vars[8]) == 0 & get(vars[9]) == 0 ~ 1,
+        TRUE ~ NA_real_)) |>
+    mutate(
+      !!varCat4 := case_when(
+        get(vars[5]) == 3 | get(vars[6]) == 3 | get(vars[7]) %in% c(1, 2, 3) | 
+          get(vars[8]) %in% c(1, 2, 3) | get(vars[9]) %in% c(1, 2, 3) ~ 1,
+        TRUE ~ NA_real_))
+  
+  df <- df %>%
+    mutate(
+      !!varCat1 := case_when(
+        get(varCat1) == 1 & (get(varCat2) == 1 | get(varCat3) == 1 | get(varCat4) == 1) ~ 2,
+        TRUE ~ get(varCat1)
+      ),
+      !!varCat2 := case_when(
+        get(varCat2) == 1 & (get(varCat3) == 1 | get(varCat4)) == 1 ~ 2,
+        TRUE ~ get(varCat2)
+      ),
+      !!varCat3 := case_when(
+        get(varCat3) == 1 & get(varCat4) == 1 ~ 2,
+        TRUE ~ get(varCat3)
+      )
+    )
+  
+  df <- df %>%
+    mutate(across(c(!!varCat1, !!varCat2, !!varCat3, !!varCat4), 
+                  ~ case_when(is.na(.) & (!is.na(get(varCat1)) | !is.na(get(varCat2)) | 
+                                            !is.na(get(varCat3)) | !is.na(get(varCat4))) ~ 2,
+                              TRUE ~ .))) 
+  
+  return(df)
+}
+
+main <- reduce(c("Orig", "Rescaled", "Combined"), ~ HFIA_cat(.x, .y), .init = main)
+
+main <- main |>
+  label_fds(HFIAOrigCat1, "Food secure (non-rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIAOrigCat2, "Mildly food insecure (non-rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIAOrigCat3, "Moderately food insecure (non-rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIAOrigCat4, "Severely food insecure (non-rescaled values only)", prefixFalse = "Not")
+
+main <- main |>
+  label_fds(HFIARescaledCat1, "Food secure (rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIARescaledCat2, "Mildly food insecure (rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIARescaledCat3, "Moderately food insecure (rescaled values only)", prefixFalse = "Not") |>
+  label_fds(HFIARescaledCat4, "Severely food insecure (rescaled values only)", prefixFalse = "Not")
+
+main <- main |>
+  label_fds(HFIACombinedCat1, "Food secure (combined values)", prefixFalse = "Not") |>
+  label_fds(HFIACombinedCat2, "Mildly food insecure (combined values)", prefixFalse = "Not") |>
+  label_fds(HFIACombinedCat3, "Moderately food insecure (combined values)", prefixFalse = "Not") |>
+  label_fds(HFIACombinedCat4, "Severely food insecure (combined values)", prefixFalse = "Not")
+
+main <- main |>
+  mutate(HFIACombinedCat = case_when(
+    HFIACombinedCat1 == 1 ~ 1,
+    HFIACombinedCat2 == 1 ~ 2,
+    HFIACombinedCat3 == 1 ~ 3,
+    HFIACombinedCat4 == 1 ~ 4
+  )) |>
+  mutate(HFIACombinedCat = labelled(
+    HFIACombinedCat,
+    label = "HFIA Category",
+    labels = c("Food secure" = 1,
+               "Mildly food insecure" = 2,
+               "Moderately food insecure" = 3,
+               "Severely food insecure" = 4) 
+  ))
+```
+

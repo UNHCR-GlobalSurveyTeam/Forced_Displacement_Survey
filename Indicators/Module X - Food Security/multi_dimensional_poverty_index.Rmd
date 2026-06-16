@@ -1,0 +1,1012 @@
+---
+title: "FDS - Food Security Indicators"
+sub-title: "Multidimensional Poverty Index - Global MPI"
+author: "Global Survey Team"
+date: "2026-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r loadpackages, include=FALSE}
+
+
+#Load Packages 
+if(!require(pacman)) install.packages('pacman')
+
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
+  extrafont,here)
+```
+
+
+
+Indicator definition can be found here: https://ophi.org.uk/global-mpi
+
+# Indicator Calculation 
+
+## Global MPI
+
+```{r}
+
+#recode uuid
+
+main$uuid <- main$"_uuid"
+RA_adult$uuid <- RA_adult$"_uuid" 
+RA_caregiver$uuid <- RA_caregiver$"_uuid"
+RA_woman$uuid <- RA_woman$"_uuid"
+HHroster$uuid <- HHroster$"_uuid"
+
+### Global MPI for Zambia
+
+##Education dimension ----
+
+
+###Years of schooling---
+
+
+#Years of schooling	No eligible household member has completed six years of schooling.	
+#1/6	SDG 4:Quality Education
+
+###Details: 
+#If all individuals in the household are in an age group where they should have formally completed 6 or more years of schooling,
+#but none have this achievement, then the household is deprived. However, if any individuals aged 10 years and older reported 6
+#years or more of schooling, the household is not deprived.
+
+#The educational system in Cameroon is divided into primary (six years, compulsive)
+
+
+summary(HHroster$agetouse) # Age of the individual
+
+table(HHroster$primary_complete) #If an individual has completed primary school
+
+
+HHroster <- HHroster %>%
+  mutate(
+    mpi_edu_schooling = case_when(
+      agetouse >= 10 & primary_complete == 1 ~ 1, #primary complete above 10
+      agetouse >= 10 & primary_complete == 0 ~ 0)) # deprived 
+
+table(HHroster$mpi_edu_schooling)
+
+##merge into main if there at least 1 HH member with primary school education complete
+
+#code as 1 if deprived
+
+table(HHroster$uuid)
+table(main$uuid)
+
+edu_schooling_mpi <- HHroster %>%
+  group_by(uuid) %>%
+  summarise(mpi_edu_schooling_any = as.integer(!any(mpi_edu_schooling == 1, na.rm = TRUE)))
+
+main <- main %>%
+  left_join(edu_schooling_mpi, by = "uuid")
+
+table(main$mpi_edu_schooling_any)
+
+#School attendance	Any school-aged child is not attending school up to the age at which 
+#he/she would complete class 8.	1/6	SDG 4:Quality Education
+
+##https://isced.uis.unesco.org/wp-content/uploads/sites/15/uis_isced_uploads/b81565285afa129ad02672e2b45653cc.jpg - school attendance age for Zambia 7 to 13 (inclusive)
+#agetouse is the age for HHroster
+
+
+table(HHroster$HH_Educ02a) # Are you currently going to school?  If it is school holiday between two school years, tell us about the last school year.Do not include kindergarten or preschool.
+
+HHroster <- HHroster %>%
+  mutate(
+    mpi_edu_notattending = case_when(
+      (agetouse >= 7 & agetouse <= 14) &
+        HH_Educ02a==1 ~ 0,  # attending (or completed)
+      (agetouse >= 7 & agetouse <= 14) &
+        HH_Educ02a==2 ~ 1   # not attending
+    )
+  )
+
+table(HHroster$mpi_edu_notattending)
+
+##merge into main if there at least 1 child not attending
+
+edu_attending_mpi <- HHroster %>%
+  group_by(uuid) %>%
+  summarise(mpi_edu_notattending_any = as.integer(any(mpi_edu_notattending == 1, na.rm = TRUE)))
+
+main <- main %>%
+  left_join(edu_attending_mpi, by = "uuid")
+
+table(main$mpi_edu_notattending_any)
+
+####Health-----
+
+
+
+#Nutrition	Any person under 70 years of age for whom there is nutritional information is undernourished.	1/6	SDG 2: Zero Hunger
+
+##Using if they have poor consumption score
+
+
+###Add also children 0-5 if they are undernourished
+
+#Children under 5 years (60 months and younger) are considered undernourished if their z-score of either height-for-age (stunting)
+#or weight-for-age (underweight) is below minus two standard deviations from the median of the reference population
+
+
+
+
+RA_caregiver <- RA_caregiver %>%
+  mutate(
+    mpi_stunting= case_when(
+      C020201==1 ~ 1  # undernourished child
+    )
+  )
+
+health_undernourished <- RA_caregiver %>%
+  group_by(uuid) %>%
+  summarise(health_undernourished_any = as.integer(any(mpi_stunting == 1, na.rm = TRUE)))
+
+
+table(health_undernourished$health_undernourished_any)
+
+main <- main %>%
+  left_join(health_undernourished, by = "uuid")
+
+
+main <- main %>%
+  mutate(
+    health_undernourished_any = replace_na(health_undernourished_any, 0)
+  )
+
+
+
+
+table(main$health_undernourished_any)
+table(main$FCSCat28)
+
+
+
+main <- main %>%
+  mutate(
+    mpi_foodunder = case_when(
+      FCSCat28 == "Poor" | health_undernourished_any == 1 ~ 1,
+      FCSCat28 %in% c("Borderline", "Acceptable") & health_undernourished_any == 0 ~ 0,
+      TRUE ~ NA_real_  # For any other combination including missing values
+    )
+  )
+
+table(main$mpi_foodunder, useNA = "ifany")
+
+
+
+
+#Child mortality	A child under 18 has died in the household in the five-year period preceding the survey.	1/6	SDG 3: Health and Well-being
+##Using antenatal care instead
+#Deprived if any woman in the household who has given birth in the last 3 years did not receive antenatal
+#check-ups (households with no woman who has given birth are considered non-deprived)
+
+table(RA_woman$BA4)
+
+
+RA_woman <- RA_woman %>%
+  mutate(
+    mpi_health_antenatal= case_when(
+      BA4==2 ~ 1  # deprived from antenatal care
+    )
+  )
+
+health_antenatal_mpi <- RA_woman %>%
+  group_by(uuid) %>%
+  summarise(health_antenatal_mpi_any = as.integer(any(mpi_health_antenatal == 1, na.rm = TRUE)))
+
+
+table(health_antenatal_mpi$health_antenatal_mpi_any)
+
+main <- main %>%
+  left_join(health_antenatal_mpi, by = "uuid")
+
+
+table(main$health_antenatal_mpi_any)
+
+####Standard of living
+
+
+
+
+
+###Cooking fuel	
+
+###A household cooks using solid fuel, such as dung, agricultural crop, shrubs, wood, charcoal, 
+#or coal.	1/18	SDG 7: Affordable and Clean Energy
+
+###Cooking fuel----
+
+#Deprived if the household uses solid cooking fuels for cooking (wood, dung cakes, crop residue, 
+#coal/charcoal, other)
+
+table(main$HC02)
+
+#coo	1	Solar cooker (thermal energy,not solar panels)
+#coo	2	Electric stove
+#coo	3	Piped natural gas stove
+#coo	4	Biogas stove
+#coo	5	Liquefied petroleum gas (LPG)/cooking gas stove
+#coo	6	Manufactured solid fuel stove
+#coo	7	Traditional solid fuel stove (non-manufactured)
+#coo	8	Liquid fuel stove
+#coo	9	Moveable firepan
+#coo	10	Three stone stove/open fire
+#coo	11	Build stove with bricks and/ormud
+#coo	11	No other devices used for cooking
+#coo	96	Other, specify
+
+
+main <- main %>%
+  mutate(
+    mpi_solidcooking= case_when(
+      HC02 %in% c(6,7,9,10,11,96) ~ 1, # DEPRIVED
+      TRUE ~ 0,
+    )
+  )
+
+table(main$mpi_solidcooking)
+
+
+###Sanitation	
+
+####The household has unimproved or no sanitation facility or it is improved but 
+#shared with other households.	1/18	SDG 6:Clean Water and Sanitation
+
+
+table(main$type_san_facility) ##improved sanitation facility
+table(main$shared_san_facility) ##shared toilet
+
+main <- main %>%
+  mutate(
+    mpi_noimprovedtoilet= case_when(
+      type_san_facility==1 & shared_san_facility ==1 ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+table(main$mpi_noimprovedtoilet)
+
+
+###Drinking water	
+
+##The household’s source of drinking water is not safe or safe drinking water is 
+#a 30-minute or longer walk from home, roundtrip.	1/18	SDG 6:Clean Water and Sanitation
+
+
+##Deprived if the household has no access to an improved source of water according to MDG standards,
+#considering distance (less than a 30-minute return trip): tap water, hand pump, motor pump, protected well, mineral water
+
+table(main$Improved_dw_final)
+
+###recode this for deprivation
+
+
+main <- main %>%
+  mutate(
+    mpi_nodrinkingwater= case_when(
+      Improved_dw_final==0 ~ 1,
+      Improved_dw_final==1 ~ 0
+    )
+  )
+
+table(main$mpi_nodrinkingwater)
+
+
+
+###Electricity	
+###The household has no electricity.	1/18	SDG 7: Affordable and Clean Energy
+
+
+table(main$electricity) ## hh has electricity
+
+table(main$HE01) #What source of electricity is used **most** of the time in this household?
+
+#response options
+
+#HE01	0	No electricity in household
+#HE01	1	National grid connection from (Company)
+#HE01	2	Local mini grid
+#HE01	3	Solar home system
+#3HE01	4	Solar lantern
+#HE01	5	Electric generator
+#HE01	6	Rechargeable battery
+#HE01	7	Dry cell battery/torch
+#HE01	96	Other: specify
+
+
+
+
+main <- main %>%
+  mutate(
+    mpi_noelectricity= case_when(
+      HE01 %in% c(0,7,96) ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+table(main$mpi_noelectricity)
+
+###Housing	The household has inadequate housing materials in any of the three components: 
+##floor, roof, or walls.	1/18	SDG 11: Sustainable Cities and Communities
+
+
+main <- main %>%
+  mutate(
+    HH02_WI = case_when(
+      HH02 %in% c(11, 12, 13) ~ "natural",
+      HH02 %in% c(21, 22, 23, 24, 25, 26, 50) ~ "rudimentary",
+      HH02 %in% c(31, 32, 33, 34, 35, 36) ~ "finished",
+      TRUE ~ NA_character_
+    ),
+    HH03_WI = case_when(
+      HH03 %in% c(11, 12, 13) ~ "natural",
+      HH03 %in% c(21, 22, 23, 24) ~ "rudimentary",
+      HH03 %in% c(31, 32, 33, 34, 35, 36) ~ "finished",
+      TRUE ~ NA_character_
+    ),
+    HH06_WI = case_when(
+      HH06 %in% c(11, 12) ~ "natural",
+      HH06 %in% c(21, 22) ~ "rudimentary",
+      HH06 %in% c(31, 32, 33, 34, 35, 36) ~ "finished",
+      TRUE ~ NA_character_
+    ),
+    HH02_finished = case_when(HH02_WI == "finished" ~ 1, TRUE ~ 0),
+    HH03_finished = case_when(HH03_WI == "finished" ~ 1, TRUE ~ 0),
+    HH06_finished = case_when(HH06_WI == "finished" ~ 1, TRUE ~ 0)
+  )
+
+sum(is.na(main$HH02_finished)) #WALLS
+sum(is.na(main$HH03_finished)) #ROOF
+sum(is.na(main$HH06_finished)) #Floor
+
+
+
+#inadequate flooring, usually "natural" and "rudimentary" are considered inadequate, while "finished" is adequate.
+table(main$HH02_WI)
+table(main$HH03_WI)
+table(main$HH06_WI)
+
+####Deprived if floor is made of natural materials or if dwelling has no roof or walls or if either the roof or walls are constructed using
+#natural or rudimentary materials. 
+#The definition of natural and rudimentary materials follows the classification used in country specific DHS or MICS questionnaires.
+
+main$mpi_housing <- ifelse(
+  main$HH02_WI %in% c("natural", "rudimentary") |
+    main$HH03_WI  %in% c("natural", "rudimentary") |
+    main$HH06_WI  %in% c("natural"),
+  1,  # deprived
+  0   # not deprived
+)
+
+table(main$mpi_housing)
+
+###Assets	
+
+#The household does not own more than one of these assets: radio, TV, telephone, computer, 
+#animal cart, bicycle, motorbike, or refrigerator, and does not own a car or truck.	1/18	SDG 1:No Poverty
+
+
+
+##No more than two 
+
+
+
+table(main$Assets01) # radio -- use
+table(main$Assets01b) # television --use
+table(main$Assets02l) #a laptop -- use
+table(main$Assets02b) #mobile phone -- use
+table(main$Assets02c) #smart phone -- use
+table(main$Assets02d) #bicycle -- use
+table(main$Assets02i) #animal-cart
+table(main$Assets02d) # bicycle
+table(main$Assets02e) # motorbike
+table(main$Assets01d) # refrigerator 
+table(main$Assets02f_a) # car
+table(main$Assets02f_b) # truck
+
+# Strip labels before using them in conditions
+main$Assets01    <- as.numeric(main$Assets01)
+main$Assets01b   <- as.numeric(main$Assets01b)
+main$Assets02b   <- as.numeric(main$Assets02b)
+main$Assets02c   <- as.numeric(main$Assets02c)
+main$Assets02l   <- as.numeric(main$Assets02l)
+main$Assets02i   <- as.numeric(main$Assets02i)
+main$Assets02d   <- as.numeric(main$Assets02d)
+main$Assets02e   <- as.numeric(main$Assets02e)
+main$Assets01d   <- as.numeric(main$Assets01d)
+main$Assets02f_a <- as.numeric(main$Assets02f_a)
+main$Assets02f_b <- as.numeric(main$Assets02f_b)
+
+
+str(main$Assets01)
+# Create 1 variable for telephone ownership (mobile OR smart phone)
+main$owns_telephone <- ifelse(main$Assets02b == 1 | main$Assets02c == 1, 1, 0)
+
+# Now count ownership across the 8 assets (telephone is now 1 variable)
+main$asset_count <- (
+  (main$Assets01 == 1) +    # radio
+    (main$Assets01b == 1) +   # TV
+    main$owns_telephone +     # telephone (already simplified above)
+    (main$Assets02l == 1) +   # computer
+    (main$Assets02i == 1) +   # animal cart
+    (main$Assets02d == 1) +   # bicycle
+    (main$Assets02e == 1) +   # motorbike
+    (main$Assets01d == 1)     # refrigerator
+)
+
+table(main$asset_count)
+
+# Flag deprivation: at most 1 of the 8 + does not own car/truck
+main$asset_deprived <- main$asset_count <= 1 & 
+  main$Assets02f_a != 1 & 
+  main$Assets02f_b != 1
+
+table(main$asset_deprived)
+
+main$mpi_assets <- ifelse(main$asset_deprived == FALSE, 0, 1)
+
+table(main$mpi_assets) ##ASSETS DEPRIVED max 1 asset no car/no truck
+
+
+#####
+
+
+
+main <- main %>%
+  mutate(
+    health_antenatal_mpi_any = replace_na(health_antenatal_mpi_any, 0)
+  )
+
+
+
+table(main$mpi_edu_schooling_any) # no adult with schooling- weight 1/6
+table(main$mpi_edu_notattending_any) # child not attending school 1/6
+
+table(main$mpi_foodunder) # HH has poor food consumption 1/6
+table(main$health_antenatal_mpi_any) # no antenatal care 1/6 ( instead of child mortality)
+
+
+###Standards of living
+
+table(main$mpi_nodrinkingwater) #1/18
+table(main$mpi_noimprovedtoilet) #1/18
+table(main$mpi_housing) #1/18
+table(main$mpi_noelectricity) #1/18
+table(main$mpi_solidcooking) #1/18
+table(main$mpi_assets) #1/18
+
+
+
+# Education dimensions
+main$edu_schooling <- main$mpi_edu_schooling_any * (1/6)
+main$edu_attendance <- main$mpi_edu_notattending_any * (1/6)
+
+# Health dimensions
+main$health_foodunder <- main$mpi_foodunder * (1/6)
+main$health_antenatal <- main$health_antenatal_mpi_any * (1/6)
+
+
+# Living standards
+main$nodrinkingwater <- main$mpi_nodrinkingwater * (1/18)
+main$noimprovedtoilet <- main$mpi_noimprovedtoilet * (1/18)
+main$noimprovedwalls <- main$mpi_housing * (1/18)
+main$noelectricity <- main$mpi_noelectricity * (1/18)
+main$solidcooking <- main$mpi_solidcooking * (1/18)
+main$assets <- main$mpi_assets * (1/18)
+
+# Total deprivation score per household
+main$mpi_score <- main$edu_schooling + main$edu_attendance + 
+   main$health_antenatal + main$health_foodunder +
+  main$nodrinkingwater + main$noimprovedtoilet + main$noimprovedwalls +
+  main$noelectricity + main$solidcooking + main$assets 
+
+# MPI incidence (headcount ratio) (H)
+main$mpi_poor <- main$mpi_score >= 1/3
+main$mpi_incidence <- mean(main$mpi_poor, na.rm = TRUE)
+
+table(main$mpi_incidence)
+
+
+#### 1. Incidence (H) – "How many are poor?"
+#Definition: The proportion of people (or households) who are multidimensionally poor.
+#A person is poor if their weighted deprivation score is ≥ 1/3 (or the threshold you're using).
+
+#Example: If 36 out of 100 households are poor, then H = 0.36 as above 
+
+# Calculate intensity (A): average score among the poor
+
+
+#Intensity (A) – "How poor are the poor?"
+#Definition: The average deprivation score among the poor only.
+
+#This tells us how many weighted indicators, on average, poor people are deprived in.
+
+#Range: Between the poverty cutoff (e.g. 33.3%) and 100%.
+
+#Example: If poor households, on average, are deprived in 50% of the total weight, 
+#then A = 0.50 or 50%.
+
+main$mpi_intensity <- mean(main$mpi_score[main$mpi_poor], na.rm = TRUE)
+
+table(main$mpi_intensity)
+
+###Calculate final MPI
+
+main$mpi <- main$mpi_incidence * main$mpi_intensity
+
+#MPI Value (H × A) – "How intense and widespread is poverty?"
+#Definition: The final Multidimensional Poverty Index score.
+
+#It combines the incidence and the intensity, showing the overall burden of 
+#multidimensional poverty in the population which is 16%
+
+
+# Group by Intro_07 and calculate the metrics
+mpi_results <- main %>%
+  group_by(Intro_07) %>%
+  summarise(
+    mpi_incidence = mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = mean(mpi_score[mpi_score >= 1/3], na.rm = TRUE),
+    mpi = mpi_incidence * mpi_intensity
+  )
+
+# View the results
+print(mpi_results)
+
+
+mpi_results_strata <- main %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(samp_strat) %>%
+  summarise(
+    mpi_incidence = mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = mean(mpi_score[mpi_score >= 1/3], na.rm = TRUE),
+    mpi = mpi_incidence * mpi_intensity
+  )
+
+print(mpi_results_strata)
+
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+### Percentages of people who are deprived in each indicator 
+deprivation_percentages <- FDS_XXX_202X_main %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(Intro_07) %>%
+  summarise(
+    schooling_any      = survey_mean(mpi_edu_schooling_any, na.rm = TRUE) * 100,
+    notattending_any   = survey_mean(mpi_edu_notattending_any, na.rm = TRUE) * 100,
+    antenatal_any      = survey_mean(health_antenatal_mpi_any, na.rm = TRUE) * 100,
+    food_any           = survey_mean(mpi_foodunder, na.rm = TRUE) * 100,
+    nodrinkingwater    = survey_mean(mpi_nodrinkingwater, na.rm = TRUE) * 100,
+    noimprovedtoilet   = survey_mean(mpi_noimprovedtoilet, na.rm = TRUE) * 100,
+    noimprovedwalls    = survey_mean(mpi_housing, na.rm = TRUE) * 100,
+    noelectricity      = survey_mean(mpi_noelectricity, na.rm = TRUE) * 100,
+    solidcooking       = survey_mean(mpi_solidcooking, na.rm = TRUE) * 100,
+    assets             = survey_mean(mpi_assets, na.rm = TRUE) * 100
+  )
+
+deprivation_percentages_renamed <- deprivation_percentages %>%
+  dplyr::rename(
+    `Years of schooling`  = schooling_any,
+    `School attendance`   = notattending_any,
+    `Antenatal care`      = antenatal_any,
+    `Undernourishment`    = food_any,
+    `Clean Water`         = nodrinkingwater,
+    `Sanitation`          = noimprovedtoilet,
+    `Housing`             = noimprovedwalls,
+    `Electricity`         = noelectricity,
+    `Cooking fuel`        = solidcooking,
+    `Assets`              = assets
+  )
+
+
+ deprivation_long <- deprivation_percentages_renamed %>%
+   select(-ends_with("_se")) |>
+  pivot_longer(
+    cols = -Intro_07,
+    names_to = "Indicator",
+    values_to = "Percentage"
+  )
+
+MPIdep <- ggplot(deprivation_long, aes(x = Indicator, y = Percentage/100, fill = Intro_07)) +
+  scale_y_continuous(limits = c(0, 100), expand = c(0, 0)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    x = "",
+    y = "",
+    fill = ""
+  ) +
+  theme_unhcr(grid = "Y", axis = "X") +
+  scale_fill_unhcr_d() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(limits = c(0, 1.1), expand = c(0, 0), labels = scales::percent) 
+
+###contribution of each deprivation
+
+
+# Group by Intro_07 and calculate the mean of each weighted deprivation
+contributions <- FDS_XXX_202X_main %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(Intro_07) %>%
+  summarise(
+    edu_schooling = survey_mean(edu_schooling, na.rm = TRUE),
+    edu_attendance = survey_mean(edu_attendance, na.rm = TRUE),
+    health_antenatal = survey_mean(health_antenatal, na.rm = TRUE),
+    health_foodunder = survey_mean(health_foodunder, na.rm = TRUE),
+    nodrinkingwater = survey_mean(nodrinkingwater, na.rm = TRUE),
+    noimprovedtoilet = survey_mean(noimprovedtoilet, na.rm = TRUE),
+    noimprovedwalls = survey_mean(noimprovedwalls, na.rm = TRUE),
+    noelectricity = survey_mean(noelectricity, na.rm = TRUE),
+    solidcooking = survey_mean(solidcooking, na.rm = TRUE),
+    assets = survey_mean(assets, na.rm = TRUE)
+  )
+
+
+# Normalize the contributions within each Intro_07 group
+contributions_normalized <- contributions %>%
+  mutate(across(-Intro_07, ~ . / rowSums(contributions[, -1]) * 100))
+contributions_long <- contributions_normalized %>%
+  pivot_longer(cols = -Intro_07, names_to = "Indicator", values_to = "Contribution")
+
+ggplot(contributions_long, aes(x = Intro_07, y = Contribution, fill = Indicator)) +
+  geom_bar(stat = "identity", position = "fill") +  # 100% stacked bar
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportional Contribution of Deprivation Indicators by Area",
+    x = "",
+    y = "Percentage Contribution",
+    fill = "Deprivation Indicator"
+  ) +
+  theme_minimal(base_size = 12) +  # Use a safe base theme
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+
+
+
+
+##Add tables from here for the MPI chapter
+
+
+###Overall results
+
+
+#### 1. Incidence (H) – "How many are poor?"
+#Definition: The proportion of people (or households) who are multidimensionally poor.
+#A person is poor if their weighted deprivation score is ≥ 1/3 (or the threshold you're using).
+
+#Example: If 36 out of 100 households are poor, then H = 0.36 as above 
+
+# Calculate intensity (A): average score among the poor
+
+
+#Intensity (A) – "How poor are the poor?"
+#Definition: The average deprivation score among the poor only.
+
+#This tells us how many weighted indicators, on average, poor people are deprived in.
+
+#Range: Between the poverty cutoff (e.g. 33.3%) and 100%.
+
+#Example: If poor households, on average, are deprived in 50% of the total weight, 
+#then A = 0.50 or 50%.
+
+main$mpi_intensity <- mean(main$mpi_score[main$mpi_poor], na.rm = TRUE)
+
+table(main$mpi_intensity)
+
+###Calculate final MPI
+
+main$mpi <- main$mpi_incidence * main$mpi_intensity
+
+#MPI Value (H × A) – "How intense and widespread is poverty?"
+#Definition: The final Multidimensional Poverty Index score.
+
+#It combines the incidence and the intensity, showing the overall burden of 
+#multidimensional poverty in the population which is 16%
+
+
+# Group by Intro_07 and calculate the metrics
+
+mpi_results <- FDS_XXX_202X_main %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(Intro_07) %>%
+  summarise(
+    mpi_incidence = survey_mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = survey_mean(if_else(mpi_score >= 1/3, mpi_score, NA_real_), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(mpi = mpi_incidence * mpi_intensity)
+
+
+# View the results
+print(mpi_results)
+
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+
+FDS_XXX_202X_main_strat <- main %>%
+  filter(!is.na(wgh_strata_spec)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_strata_spec, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+
+mpi_results_strata <- FDS_XXX_202X_main_strat %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(samp_strat) %>%
+  summarise(
+    mpi_incidence = survey_mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = survey_mean(if_else(mpi_score >= 1/3, mpi_score, NA_real_), na.rm = TRUE),
+    mpi = mpi_incidence * mpi_intensity
+  )
+
+
+# Combine tables
+MPI_intro <- mpi_results %>%
+  mutate(group = Intro_07, type = "Intro_07") %>%
+  filter(Intro_07 == "Refugees") |>
+  mutate(group = case_when(Intro_07 == "Refugees" ~ "Refugees total", TRUE ~ Intro_07)) |>
+  select(group, type, mpi_incidence) 
+
+MPI_strata <- mpi_results_strata %>%
+  mutate(group = samp_strat, type = "Strata") %>%
+  select(group, type, mpi_incidence)
+
+# Bind into one dataframe
+MPI_combined <- bind_rows(MPI_strata, MPI_intro)
+
+# Make sure Intro_07 groups appear last in the plot
+MPI_combined <- MPI_combined %>%
+mutate(refugee_host = case_when(                                    
+  grepl("Former Refugees", group) ~ "Former Refugees",
+  grepl("Refugees", group) ~ "Refugees",
+  grepl("Host", group) ~ "Host Community",
+  TRUE ~ NA_character_
+)) %>%
+  mutate(group = factor(group, levels = strat_order))
+
+
+
+
+# Plot
+
+library(ggtext)
+
+plots_wb$MPIstrata <- MPI_combined |>
+  ggplot(aes(
+    x = fct_rev(group),
+    y = mpi_incidence,
+    fill = fct_rev(refugee_host)
+  )) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = scales::percent(mpi_incidence, accuracy = 1)),
+            hjust = -0.1, size = 3) +
+  coord_flip(clip = "off") +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.15)),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_fill_unhcr_d(labels = c("Strata" = "Strata", "Intro_07" = "Population Groups")) +
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, 30)) +
+  labs(x = NULL, y = NULL, fill = NULL) +
+  theme_unhcr(grid = "X", axis = "Y")
+
+
+
+
+
+
+###Check deprivations by strata
+
+# Group by Intro_07 and calculate the percentages for each indicator
+deprivation_percentages_strat <- FDS_XXX_202X_main %>%
+  filter(!is.na(Intro_07)) %>%
+  group_by(samp_strat) %>%
+  summarise(
+    schooling_any = survey_mean(mpi_edu_schooling_any, na.rm = TRUE) * 100,
+    notattending_any = survey_mean(mpi_edu_notattending_any, na.rm = TRUE) * 100,
+    antenatal_any = survey_mean(health_antenatal_mpi_any, na.rm = TRUE) * 100,
+    food_any = survey_mean(mpi_foodunder, na.rm = TRUE) * 100,
+    nodrinkingwater = survey_mean(mpi_nodrinkingwater, na.rm = TRUE) * 100,
+    noimprovedtoilet = survey_mean(mpi_noimprovedtoilet, na.rm = TRUE) * 100,
+    noimprovedwalls = survey_mean(mpi_housing, na.rm = TRUE) * 100,
+    noelectricity = survey_mean(mpi_noelectricity, na.rm = TRUE) * 100,
+    solidcooking = survey_mean(mpi_solidcooking, na.rm = TRUE) * 100,
+    assets = survey_mean(mpi_assets, na.rm = TRUE) * 100,
+  )
+
+# Rename and reorder columns
+deprivation_percentages_strat_renamed <- deprivation_percentages_strat %>%
+  rename(
+    `Years of schooling` = schooling_any,
+    `School attendance` = notattending_any,
+    `Antenatal care` = antenatal_any,
+    `Undernourishment` = food_any,
+    `Water` = nodrinkingwater,
+    `Sanitation` = noimprovedtoilet,
+    `Housing Materials` = noimprovedwalls,
+    `Electricity` = noelectricity,
+    `Cooking fuel` = solidcooking,
+    `Assets` = assets
+  )
+
+# Start from your renamed table
+deprivation_long <- deprivation_percentages_strat_renamed %>%
+  select(-ends_with("_se")) %>%
+  pivot_longer(
+    cols = -samp_strat,
+    names_to = "Indicator",
+    values_to = "Percent"
+  ) %>%
+  pivot_wider(
+    names_from = samp_strat,
+    values_from = Percent
+  )
+
+# Make a nice gt table
+dimensionmpi <- deprivation_long %>%
+  gt() %>%
+  tab_header(
+    title = NULL,
+    subtitle = "Each value shows % of households deprived in the given indicator"
+  ) %>%
+  fmt_number(
+    columns = where(is.numeric),
+    decimals = 0
+  ) %>%
+  cols_label(
+    Indicator = "Indicator"
+  ) %>%
+  tab_options(
+    table.font.size = "small",
+    column_labels.font.weight = "bold"
+  )
+
+# Render in Rmd
+dimensionmpi
+
+
+
+##try with typologies
+
+# Variables to summarize
+vars <- c(
+  "hhhead_agecat", "nucleus_type", "extended_type", "HH_02_HoH_bin", "Intro_09",
+  "children3", "origincountry", "depcat2", "depcat3", "hhhead_zam",
+  "disability_HoH", "hhhead_literacy", "hhhead_primary", "ScProtec01_bin"
+)
+
+# Function to calculate MPI incidence by variable and Intro_07
+get_mpi_table <- function(df, var) {
+  df %>%
+    mutate(mpi_poor = mpi_score >= 1/3) %>%
+    filter(!is.na(.data[[var]]), !is.na(Intro_07)) %>%
+    group_by(Intro_07, .data[[var]]) %>%
+    summarise(
+      Total = n(),
+      Poor = survey_total(mpi_poor, na.rm = TRUE),
+      `MPI incidence (%)` = round(survey_mean(mpi_poor, na.rm = TRUE) * 100, 1),
+      .groups = "drop"
+    ) %>%
+    rename(Category = 2, `Population Groups` = Intro_07)
+}
+
+# Apply function to all variables and bind rows
+big_mpi_table <- map_dfr(vars, ~ get_mpi_table(FDS_XXX_202X_main, .x))
+
+# Display the table
+mpitypologytable <- kableExtra::kable(
+  big_mpi_table,
+  caption = "MPI Incidence by Household Characteristics and Population Group",
+  digits = 1
+)
+
+###Global MPI Definition Table 
+
+mpi_table <- data.frame(
+  `Dimensions of Poverty` = c(
+    "Health (1/3)", "Health (1/3)", 
+    "Education (1/3)", "Education (1/3)", 
+    "Living Standards (1/3)", "Living Standards (1/3)", 
+    "Living Standards (1/3)", "Living Standards (1/3)", 
+    "Living Standards (1/3)", "Living Standards (1/3)"
+  ),
+  `Indicators of Poverty` = c(
+    "Nutrition", "Antenatal care", 
+    "Years of schooling", "School attendance", 
+    "Cooking fuel", "Sanitation", 
+    "Drinking water", "Electricity", 
+    "Housing", "Assets"
+  ),
+  `Person is deprived if living in a household where...` = c(
+    "Any child under 5 is undernourished or household has a poor food consumption",
+    "Deprived if any woman who gave birth in the last 3 years did not receive antenatal check-ups (HHs without such women are non-deprived)",
+    "No eligible household member has completed six years of schooling",
+    "Any school-aged child is not attending school up to the age at which he/she would complete primary school",
+    "A household cooks using solid fuel, such as dung, agricultural crop, shrubs, wood, charcoal, or coal",
+    "The household has unimproved or no sanitation facility, or it is improved but shared with other households",
+    "The household’s source of drinking water is not safe or safe drinking water is a 30-minute or longer walk from home, roundtrip",
+    "The household has no electricity",
+    "The household has inadequate housing materials in any of the three components: floor, roof, or walls",
+    "The household does not own more than one of these assets: radio, TV, telephone, computer, animal cart, bicycle, motorbike, or refrigerator, and does not own a car or truck."
+  ),
+  `Weight of Indicator` = c(
+    "1/6", "1/6", 
+    "1/6", "1/6", 
+    "1/18", "1/18", "1/18", "1/18", 
+    "1/18", "1/18"
+  ),
+  `Corresponding SDG Area` = c(
+    "SDG 2: Zero Hunger", 
+    "SDG 3: Health and Well-being",
+    "SDG 4: Quality Education",
+    "SDG 4: Quality Education",
+    "SDG 7: Affordable and Clean Energy",
+    "SDG 6: Clean Water and Sanitation",
+    "SDG 6: Clean Water and Sanitation",
+    "SDG 7: Affordable and Clean Energy",
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG 1: No Poverty"
+  )
+)
+
+mpi_table <- flextable::flextable(mpi_table) %>%
+  #flextable::set_caption("Multidimensional Poverty Indicators and Deprivation Definitions") |>
+  flextable::theme_booktabs()  |>
+  flextable::width(width = 1.5) %>% 
+  flextable::fontsize(size = 8, part = "all")
+
+
+  
+###Last table for the map
+
+
+mpi_results_province <- FDS_XXX_202X_main %>%
+  group_by(Intro_07, Intro_03a_NUTS1) %>%
+  summarise(
+    mpi_incidence = mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = mean(mpi_score[mpi_score >= 1/3], na.rm = TRUE),
+    mpi = mpi_incidence * mpi_intensity
+  )
+
+
+
+mpi_results_strata <- FDS_XXX_202X_main_strat %>%
+  group_by(Intro_07, samp_strat) %>%
+  summarise(
+    mpi_incidence = survey_mean(mpi_score >= 1/3, na.rm = TRUE),
+    mpi_intensity = survey_mean(if_else(mpi_score >= 1/3, mpi_score, NA_real_), na.rm = TRUE),
+    mpi = mpi_incidence * mpi_intensity
+  )
+
+
+write_xlsx(mpi_results_province, "mpi_results_province.xlsx")
+write_xlsx(mpi_results_strata, "mpi_results_strata.xlsx")
+```

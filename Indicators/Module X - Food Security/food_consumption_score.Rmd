@@ -1,0 +1,220 @@
+---
+title: "FDS - Food Security Indicators"
+sub-title: "Food Consumption Score"
+author: "Global Survey Team"
+date: "2026-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r loadpackages, include=FALSE}
+
+
+#Load Packages 
+if(!require(pacman)) install.packages('pacman')
+
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
+  extrafont,here)
+```
+
+The Food Consumption Score (FCS) is the most commonly used food security indicator by WFP and partners. This indicator is a composite score based on households’ dietary diversity, food consumption frequency, and relative nutritional value of different food groups. The FCS is calculated by asking how often households consume food items from the 8 different food groups (plus condiments) during a 7-day reference period.
+
+In addition to this, the FCS module collects data on sources of the consumed foods acquired by households. Although the information is not widely used and reported, it is useful in understanding the household’s level of self-reliance (e.g. own production or cash purchases) or dependency on outside sources (e.g. food assistance). Thus, this information should also be collected as part of the standard module.
+
+
+Indicator definition can be found here: https://vamresources.manuals.wfp.org/docs/food-consumption-score
+
+
+More information on the usage of the indicator: https://docs.wfp.org/api/documents/WFP-0000171255/download/ 
+ 
+# Indicator Calculation 
+
+```{r}
+
+#Rename variable names to standard WFP names 
+
+
+# Var FCSStapCer FCSStapTub
+
+main$Food11aa
+main$FCSStap <- main$Food11aa
+plot(density(main$FCSStap))
+
+# Legumes/nuts (FCSPulse)
+main$Food12a
+main$FCSPulse <- main$Food12a
+plot(density(main$FCSPulse))
+
+
+# Milk and other dairy products (FCSDairy)
+main$Food13a
+main$FCSDairy<- main$Food13a
+plot(density(main$FCSDairy))
+
+
+# Meat, fish and eggs (FCSPr)
+main$Food14a
+main$FCSPr<- main$Food14a
+plot(density(main$FCSPr))
+
+# calculate the max
+#main$FCSMaxPr <- pmax(main$Food14.4a, main$Food14.1a, main$Food14.3a, main$Food14.2a, na.rm = TRUE)
+
+
+# Food14.4a - Eggs
+# Food14.1a - fish, meat or eggs
+# Food14.3a - Fish/shellfish:  fish, including canned tuna, escargot, and / or other seafood
+# Food14.2a  Organ meat:  liver, kidney, heart and / or other organ meats
+
+# Vegetables and leaves (FCSVeg)
+
+main$Food15a
+main$FCSVeg<- main$Food15a
+plot(density(main$FCSVeg))
+
+##Vitamin a Orange vegetables, i.e. vegetables rich in Vitamin A: carrot, red pepper, pumpkin, orange sweet potatoes, --> Food15.1a
+
+## Green leafy vegetables: spinach, broccoli, amaranth and / or other dark green leaves, cassava leaves --> Food15.2a
+
+# Fruits (FCSFruit)
+
+main$Food16a
+main$FCSFruit<- main$Food16a
+plot(density(main$FCSFruit))
+
+##  Vitamin A: mango, papaya, apricot, peach --> Food16.1a
+
+# Oil, fat and butter (FCSFat)  
+
+main$Food17a
+main$FCSFat<- main$Food17a
+plot(density(main$FCSFat))
+
+# Sugar and sweet (FCSSugar)
+
+
+main$Food18a
+main$FCSSugar<- main$Food18a
+plot(density(main$FCSSugar))
+
+# Condiments / Spices
+
+main$Food19a
+main$FCSCond<- main$Food19a
+plot(density(main$FCSCond))
+
+
+```
+
+```{r}
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+
+food_consumption_categories <- FDS_XXX_202X_main %>%
+  group_by(Intro_07) %>%
+  summarize(
+    Cereals = survey_mean(FCSStap, na.rm = TRUE),
+    Pulses = survey_mean(FCSPulse, na.rm = TRUE),
+    Dairy = survey_mean(FCSDairy, na.rm = TRUE),
+    Protein = survey_mean(FCSPr, na.rm = TRUE),
+    Vegetables = survey_mean(FCSVeg, na.rm = TRUE),
+    Fruits = survey_mean(FCSFruit, na.rm = TRUE),
+    Fats = survey_mean(FCSFat, na.rm = TRUE),
+    Sugar = survey_mean(FCSSugar, na.rm = TRUE)
+  )
+
+
+```
+
+```{r}
+# Calculate FCS ---------------------------------------------------------------#}
+main <- main %>%
+  mutate(FCS = FCSStap * 2 +
+                FCSPulse * 3 +
+                FCSDairy * 4 +
+                FCSPr * 4 +
+                FCSVeg +
+                FCSFruit +
+                FCSFat * 0.5 +
+                FCSSugar * 0.5)
+
+# Create FCG groups based on 21/55 or 28/42 thresholds ------------------------# 
+###Use this when analyzing a country with low consumption of sugar and oil - thresholds 21-35
+main$FCSCat21 <-cut(main$FCS,
+                    breaks=c(0,21,35,Inf),
+                    include.lowest=TRUE,
+                    #labels=c("Poor","Borderline","Acceptable"))
+                    labels=FALSE)
+
+### define value labels and properties for "FCS Categories".
+val_lab(main$FCSCat21) = num_lab("
+             1 Poor
+             2 Borderline
+             3 Acceptable
+")
+
+### Important note: pay attention to the threshold used by your CO when selecting the syntax (21 cat. vs 28 cat.)
+### Use this when analyzing a country with high consumption of sugar and oil - thresholds 28-42
+
+main$FCSCat28 <- cut(
+  main$FCS,
+  breaks = c(0, 28, 42, Inf),
+  include.lowest = TRUE,
+  labels = c("Poor", "Borderline", "Acceptable")
+)
+```
+
+```{r}
+table(main$FCSCat28)
+table(main$FCSCat21)
+
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+###Use FCSCat28
+
+
+FCS <- FDS_XXX_202X_main %>%
+  group_by(Intro_07, FCSCat28) %>%
+  summarize(percentage = 100*survey_prop()) |>
+  ungroup()
+
+
+```
+
+```{r}
+
+##FCS Analysis disaggregated by sampling strata
+
+FDS_XXX_202X_main_strat <- main %>%
+  filter(!is.na(wgh_strata_spec)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_strata_spec, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+FCS_strata <- FDS_XXX_202X_main_strat %>%
+  group_by(samp_strat, FCSCat28)  %>%
+  summarize(percentage = 100*survey_prop()) |>
+  ungroup()
+
+```
+

@@ -1,0 +1,173 @@
+---
+title: "FDS - Food Security Indicators"
+sub-title: "Food Consumption Score - Nutritional Quality Analysis"
+author: "Global Survey Team"
+date: "2026-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r loadpackages, include=FALSE}
+
+
+#Load Packages 
+if(!require(pacman)) install.packages('pacman')
+
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven, here,
+  extrafont,here)
+```
+
+
+
+The Food Consumption Score Nutritional Quality Analysis (FCS-N) is a tool derived from the Food Consumption Score indicator, that looks at three main nutrients (Vitamin A,Protein and Hem Iron) of the food items consumed. The gathered data from this FCS-N module is essential for understanding nutritional health and well-being of households. The FCS is calculated by inspecting how often households consume food items from the different food groups during a 7-day reference period.In addition to this, the FCS-N module collects data on sources of the consumed foods acquired by households.
+
+
+More details on the indicator can be found here: https://vamresources.manuals.wfp.org/docs/food-consumption-score-nutritional-quality-analysis-fcs-n
+
+ 
+# Indicator Calculation 
+
+## FCS - nutrition
+
+```{r}
+##Calculate FSN-N
+
+# Label FCSN relevant variables -----------------------------------------------#
+
+
+# Food144a - Eggs
+# Food141a - fish, meat or eggs
+# Food143a - Fish/shellfish:  fish, including canned tuna, escargot, and / or other seafood
+# Food142a  Organ meat:  liver, kidney, heart and / or other organ meats
+
+table(main$Food14.4a) ## eggs
+
+main$FCSNPrMeatF <- main$Food14.1a 
+main$FCSNPrMeatO <- main$Food14.2a 
+main$FCSNPrFish <- main$Food14.3a 
+main$FCSNPrEggs <- main$Food14.4a 
+
+main$FCSNVegOrg <- main$Food15.1a 
+main$FCSNVegGre <- main$Food15.2a 
+
+main$FCSNFruiOrg <- main$Food16.1a
+
+```
+
+```{r}
+var_label(main$FCSNPrMeatF) <- "Consumption in past 7 days: Flesh meat"
+var_label(main$FCSNPrMeatO) <- "Consumption in past 7 days: Organ meat"
+var_label(main$FCSNPrFish)  <- "Consumption in past 7 days: Fish/shellfish"
+var_label(main$FCSNPrEggs)  <- "Consumption in past 7 days: Eggs"
+var_label(main$FCSNVegOrg)  <- "Consumption in past 7 days: Orange vegetables (vegetables rich in Vitamin A)"
+var_label(main$FCSNVegGre)  <- "Consumption in past 7 days: Green leafy vegetables"
+var_label(main$FCSNFruiOrg) <- "Consumption in past 7 days: Orange fruits (Fruits rich in Vitamin A)"
+	
+
+
+# Compute aggregates of key micronutrient consumption -------------------------#
+
+## Vitamin A-Rich Foods -------------------------------------------------------#
+
+main <- main %>% mutate(FGVitA = FCSDairy +FCSNPrMeatO +FCSNPrEggs +
+                                 FCSNVegOrg +FCSNVegGre +FCSNFruiOrg)
+var_label(main$FGVitA) <- "Consumption of vitamin A-rich foods"
+
+## Protein-Rich Foods ---------------------------------------------------------#
+
+main <- main %>% mutate(FGProtein = FCSPulse +FCSDairy +FCSNPrMeatF +
+                                    FCSNPrMeatO +FCSNPrFish +FCSNPrEggs)
+var_label(main$FGProtein) <- "Consumption of protein-rich foods"
+
+## Iron-Rich Foods ------------------------------------------------------------#
+
+main <- main %>% mutate(FGHIron = FCSNPrMeatF +FCSNPrMeatO +FCSNPrFish)
+var_label(main$FGHIron) <- "Consumption of heme iron-rich foods"
+
+## recode into nutritious groups  ---------------------------------------------#
+
+##Replace NA with 0 as this part was not asked if main part was 0
+
+main <- main %>%
+  mutate(
+    FGVitACat = case_when(
+      FGVitA == 0 ~ 1,
+      between(FGVitA, 1, 6) ~ 2,
+      FGVitA >= 7 ~ 3,
+      TRUE ~ 1  # If NA or any other case, set to 1
+    ),
+    FGProteinCat = case_when(
+      FGProtein == 0 ~ 1,
+      between(FGProtein, 1, 6) ~ 2,
+      FGProtein >= 7 ~ 3,
+      TRUE ~ 1
+    ),
+    FGHIronCat = case_when(
+      FGHIron == 0 ~ 1,
+      between(FGHIron, 1, 6) ~ 2,
+      FGHIron >= 7 ~ 3,
+      TRUE ~ 1
+    )
+  )
+
+
+# define variables labels and properties for FGVitACat FGProteinCat FGHIronCat
+main <- main %>%
+  mutate(across(c(FGVitACat, FGProteinCat, FGHIronCat), 
+                ~labelled(., labels = c(
+                  "Never consumed" = 1,
+                  "Consumed sometimes" = 2,
+                  "Consumed at least 7 times" = 3
+                ))))
+
+main <- main %>%
+  mutate(across(c(FGVitACat, FGProteinCat, FGHIronCat),
+                ~factor(., levels = c(1, 2, 3),
+                           labels = c("Never consumed", "Consumed sometimes", 
+                                   "Consumed at least 7 times"))))
+
+var_label(main$FGVitACat)    <- "Consumption group of vitamin A-rich foods"
+var_label(main$FGProteinCat) <- "Consumption group of protein-rich foods"
+var_label(main$FGHIronCat)   <- "Consumption group of heme iron-rich foods"
+```
+
+```{r}
+table(main$FGVitACat)
+table(main$FGProteinCat)
+table(main$FGHIronCat)
+```
+
+```{r}
+
+
+FDS_XXX_202X_main <- main %>%
+  filter(!is.na(wgh_samp_pop_restr)) %>%
+  as_survey_design(
+    strata=samp_strat,
+    weights = wgh_samp_pop_restr, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters )
+  )
+
+dat_wb$FGVitACat <- FDS_XXX_202X_main %>%
+  group_by(Intro_07, FGVitACat) %>%
+  summarize(percentage = 100*survey_prop()) |>
+  ungroup()
+
+dat_wb$FGHIronCat <- FDS_XXX_202X_main %>%
+  group_by(Intro_07, FGHIronCat)%>%
+  summarize(percentage = 100*survey_prop()) |>
+  ungroup()
+
+dat_wb$FGProteinCat <- FDS_XXX_202X_main %>%
+  group_by(Intro_07, FGProteinCat) %>%
+  summarize(percentage = 100*survey_prop()) |>
+  ungroup()
+```
+
