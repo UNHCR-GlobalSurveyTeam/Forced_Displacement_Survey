@@ -3,12 +3,20 @@
 # Common setup
 ############################################################
 
-library(dplyr)
-library(srvyr)
-library(survey)
-library(ggplot2)
-library(unhcrthemes)
-library(scales)
+
+#ScProtec16: In the last 12 months, have you or anyone in your household received any of the following payments from the host country government?  
+table(main$ScProtec16a)#Social protection cash benefit
+table(main$ScProtec16b)#Parental/Maternity benefit
+table(main$ScProtec16c)#Disability benefit
+table(main$ScProtec16d)#Unemployment benefit
+table(main$ScProtec16e)#Employment injury benefit
+table(main$ScProtec16f)#Sickness benefit
+table(main$ScProtec16g)#Old-age pension
+table(main$ScProtec16h)#Other vulnerability benefit
+table(main$ScProtec16i)#Social assistance cash benefit
+
+
+
 
 survey_design <- function(data){
   
