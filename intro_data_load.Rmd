@@ -1,0 +1,219 @@
+---
+title: "Standardized FDS Qv1 2024 SDG Indicator Calculations"
+author: "Global Survey Team"
+output:
+  pdf_document:
+    toc: true
+  unhcrdown::html_page:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=FALSE)
+```
+
+
+Date: Last revision was in October 2026
+
+Github Repository is here: <https://github.com/UNHCR-GlobalSurveyTeam/Forced_Displacement_Survey>
+
+Previous Rmarkdown document for all SDGs can be found here :<https://rstudio.unhcr.org/FDS_SDG/>
+
+
+*For any issues please contact Ilgi Bozdag at bozdag@unhcr.org*
+
+**Important Instructions**
+
+1. For correct calculations, ensure you have five datasets named: 'HHroster', 'main', 'RA_adult', 'RA_caregiver', 'RA_woman'.  
+
+2. Confirm that your datasets are cleaned and weighted as required for accurate results!
+
+
+# Sustainable Development Goals
+
+[The 2030 Agenda for Sustainable Development](https://sdgs.un.org/2030agenda), adopted by all United Nations Member States in 2015, provides a shared blueprint for peace and prosperity for people and the planet, now and into the future. At its heart are the 17 Sustainable Development Goals (SDGs), which are an urgent call for action by all countries - developed and developing - in a global partnership. They recognize that ending poverty and other deprivations must go hand-in-hand with strategies that improve health and education, reduce inequality, and spur economic growth – all while tackling climate change and working to preserve our oceans and forests. 
+
+
+There is broad consensus around the key indicators used to measure, inform and monitor progress towards global development objectives, as exemplified by the Sustainable Development Goals and related efforts of the MICS, DHS, IHSN, together with national governments.
+UNHCR's objectives are largely aligned with these frameworks.
+
+[Forced Displacement Survey (FDS)](https://www.unhcr.org/what-we-do/reports-and-publications/data-and-statistics/forced-displacement-survey) is a programme designed to streamline and standardize surveys that collect data on forcibly displaced people.
+
+FDS is a household-level survey with standard questionnaires following context-appropriate methodological approaches.The FDS collects multi-topic data on the socioeconomic and living conditions of refugees, asylum-seekers and nationals who live in proximity (host communities).  The main topics covered by the FDS can be broadly classified into four areas: demographics and legal status, socio-cultural, economic and civil-political.
+
+
+FDS help us to SDG indicators in a standardized way to have a global understanding of the results. Both indicators and questionnaire is also largely aligned with MICS, DHS, IHSN, national household surveys and other standardized UNHCR surveys.
+
+This document will guide you on how each and every indicator will be calculated with the FDS standard questionnaire module corresponding to each indicator.
+
+**Population** refers to survey population in this guidance for the calculation of indicators as shown by numerator and denominator.
+
+**How to calculate an indicator?** In the calculation of a percentage or rate, the denominator is often the total number of observations, events, or units in the population or sample being studied. The numerator, on the other hand, represents the specific part or subset of interest.
+
+Percentage = \(\left(\frac{\text{Numerator}}{\text{Denominator}}\right) \times 100\)
+
+**Description of the datasets**
+
+The FDS consists of 4 questionnaires and an introduction section which together form the FDS interview. The 4 questionnaires and the respective modules in each are the following: 
+
+**- Head of the Household questionnaire**, responded to by the head of the household (>= 15 years of age), it includes all household level questions such as access to services. This questionnaire also includes the household roster, where the head of the household responds to individual level questions about all household members.  
+
+***Head of the Household - Household Roster***
+
+HH definition  
+Identification module  
+HH Roster (including education & language)  
+Banking for HH Roster  
+Disability   
+ 
+***Head of the Household***
+
+Legal Status 2 
+Displacement History  
+Shelter  
+WASH  
+Clean Energy  
+Assets  
+Mosquito Nets  
+Land and Property  
+Food and Nutrition  
+Objective Wellbeing   
+Experience of Shocks  
+Social Protection  
+Child Labor  
+
+
+**- Random Adult questionnaire**, responded to by the randomly selected adult (>= 15 years of age) from the household.
+
+Subjective and Mental Wellbeing  
+Aspiration   
+Healthcare   
+Mental Health  
+Mobility  
+Education 2  
+Skills   
+Employment  
+Job Search   
+Time Spent on Domestic Work   
+Trust - Political Participation  
+Financial Solutions  
+Remittances  
+Access to Information  
+Freedom of thought  
+Feel Safe Walking Alone  
+Access to Justice  
+Acceptance between communities  
+Discrimination  
+Victimization  
+
+**- Random Woman questionnaire**, responded to by the randomly selected woman (>= 15 years of age) who gave birth in the last 2 years.
+
+Women’s health - Birth attendance  
+Family Planning  
+Menstrual Hygiene  
+
+**- Caregiver questionnaire**, responded to by the caregiver of the randomly selected child (<5 years of age) from the household.
+
+Anthropometrics
+Immunization 
+
+Data is organized in 5 datasets, which are connected through an unique identifier "uuid". The 5 datasets are the following: 
+
+- *HHroster* = Roster section from questionnaire responded to by the head of the household 
+
+- *main* = Questionnaire responded to by head of the Household 
+
+- *RA_adult* = Questionnaire responded to by the randomly selected adult 
+
+- *RA_woman* = Questionnaire responded to by the randomly selected woman
+
+- *RA_caregiver* = Questionnaire responded to by the caregiver of the randomly selected child
+
+
+At this step, you should already have all five datasets structured in a way that will allow you to calculate your indicators as you will be guided in this document. It's not recommended to clear your work space if your datasets are already loaded. 
+
+
+```{r, eval=FALSE}
+## Install pacman if not already installed
+if(!require(pacman)) install.packages('pacman')
+
+## Load all required libraries using pacman
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes, haven )
+```
+```{r, eval=FALSE}
+##Upload cleaned and weighted datasets 
+
+HHroster <- read_rds("HHroster.rds")
+main <- read_rds("main.rds")
+RA_adult <- read_rds("RA_adult.rds")
+RA_woman <- read_rds("RA_woman.rds")
+RA_caregiver <- read_rds ("RA_caregiver.rds")
+```
+
+## Standardized Disaggregation Variables
+
+**Population Group**
+```{r, eval=FALSE}
+
+table(HHroster$Intro_07)     #in dataset "HHroster". 
+table(main$Intro_07)         #in dataset "main". 
+table(RA_adult$Intro_07)     #in dataset "RA_adult". 
+table(RA_woman$Intro_07)     #in dataset "RA_woman". 
+table(RA_caregiver$Intro_07) #in dataset "RA_caregiver". 
+```
+
+**Age**
+```{r, eval=FALSE}
+# Main age variable
+summary(HHroster$agetouse) #Main age variable at individual level can be found in the dataset "HHroster". 
+
+#2 categories (<18, >18)
+table(HHroster$HH_04_cat2) #in dataset "HHroster".
+
+#4 categories (0-4, 5-17, 18-59, 60+)
+table(HHroster$HH_04_cat4) #in dataset "HHroster".
+
+#We look at age categories only for indicators for which data is pulled from the "HHroster" dataset, which holds the individual data for all members of the household. For other four datasets (Head of the household, randomly selected adult, randomly selected woman, and randomly selected caregiver) the respondent is always => 15 years of age. 
+
+summary(main$HH_04_HoH)           #in dataset "main".
+summary(RA_adult$age_selected)   #in dataset "RA_adult".
+summary(RA_woman$agerandomwoman) #in dataset "RA_woman".
+summary(RA_caregiver$HH_04_RC)   #in dataset "RA_caregiver".
+```
+
+**Gender**
+```{r, eval=FALSE}
+table(HHroster$HH_02)          #in dataset "HHroster".
+table(main$HH_02_HoH)         #in dataset "main". 
+table(RA_adult$HH_02_RA)     #in dataset "RA_adult".
+table(RA_caregiver$HH_02_RC) #in dataset "RA_caregiver".
+```
+
+
+**Disability**
+```{r, eval=FALSE}
+table(HHroster$disability)          #in dataset "HHroster".
+table(main$disability_HoH)         #in dataset "main". 
+table(RA_adult$disability_RA)     #in dataset "RA_adult".
+table(RA_woman$disability_RW)     #in dataset "RA_woman".
+table(RA_caregiver$disability_RC) #in dataset "RA_caregiver".
+```
+
+
+**Country of origin**
+```{r, eval=FALSE}
+table(HHroster$COO)          #in dataset "HHroster".
+table(main$COO_HoH)         #in dataset "main".
+table(RA_adult$COO_RA)     #in dataset "RA_adult".
+table(RA_woman$COO_RW)     #in dataset "RA_woman".
+table(RA_caregiver$COO_RC) #in dataset "RA_caregiver".
+
+```
