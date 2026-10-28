@@ -18,7 +18,7 @@ Calculations include separate indicators in order to distinguish effective cover
 
 |         Standard Questions         |
 |:----------------------------------:|
-| ScProtec01, ScProtec04, ScProtec16 |
+| ScProtec04, ScProtec01_1/01_2/01_3/01_4, ScProtec16 |
 
 **Sources**\
 1.[SDG 1.3.1 Metadata Guidance](https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Funstats.un.org%2Fsdgs%2Fmetadata%2Ffiles%2FMetadata-01-03-01a.docx&wdOrigin=BROWSELINK)
