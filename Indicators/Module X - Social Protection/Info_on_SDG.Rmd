@@ -1,0 +1,34 @@
+---
+title: "1.3.1 SDG indicator"
+output: pdf_document
+date: "2026-10-28"
+---
+
+1.3.1 SDG Indicator
+
+**Proportion of population covered by social protection floors/systems, by sex, distinguishing children, unemployed persons, older persons, persons with disabilities, pregnant women, newborns, work-injury victims and the poor and the vulnerable**
+
+Indicator Code: C010301
+
+The indicator reflects the proportion of persons effectively covered by a social protection system, including social protection floors. It also reflects the main components of social protection: child and maternity benefits, support for persons without a job, persons with disabilities, victims of work injuries and older persons. Effective coverage of social protection is measured by the number of people who are either actively contributing to a social insurance scheme or receiving benefits (contributory or non-contributory).
+
+SDG Indicator 1.3.1 and ILO methodology includes child, family and maternity benefits; support for people without jobs, people with disabilities, victims of work injuries and older people.
+
+Calculations include separate indicators in order to distinguish effective coverage for children, unemployed persons, older persons and persons with disabilities, mothers with newborns, workers protected in case of work injury, and the poor and the vulnerable. For each case, coverage is expressed as a share of the respective population. FDS can only cover part of the indicators.
+
+|         Standard Questions         |
+|:----------------------------------:|
+| ScProtec01, ScProtec04, ScProtec16 |
+
+**Sources**\
+1.[SDG 1.3.1 Metadata Guidance](https://view.officeapps.live.com/op/view.aspx?src=https%3A%2F%2Funstats.un.org%2Fsdgs%2Fmetadata%2Ffiles%2FMetadata-01-03-01a.docx&wdOrigin=BROWSELINK)
+
+Below indicators cannot be calculated from FDS questionnaire. These require administrative records, poverty classifications, or social insurance contribution information that is not available in the FDS questionnaire.
+
+- SDG 1.3.1b Children covered by child/family benefits
+
+- SDG 1.3.1f Workers covered in case of employment injury
+
+- SDG 1.3.1h Vulnerable persons receiving benefits
+
+- SDG 1.3.1i Poor population receiving social assistance
